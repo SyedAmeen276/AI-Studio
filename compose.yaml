@@ -25,16 +25,6 @@ services:
       - ./output:/workspace/output
     depends_on: [ollama]
     networks: [ai-studio]
-  kokoro:
-    platform: linux/amd64
-    image: hangrylabs/kokorotts:v1.0@sha256:5afef5b9f3d779e56248992274d46a66c0715110eb09e47e1332c39951361f24
-    container_name: acs-kokoro
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:7860:7860"
-    volumes:
-      - kokoro_data:/app/persistent
-    networks: [ai-studio]
 
 networks:
   ai-studio:
