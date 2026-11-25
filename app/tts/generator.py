@@ -2,77 +2,107 @@ import argparse
 import json
 import re
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import soundfile as sf
 
-from app.tts.config import (
-    AUDIO_OUTPUT_DIR,
-    DEFAULT_SPEED,
-    DEFAULT_VOICE,
-)
+from app.tts.config import AUDIO_OUTPUT_DIR, DEFAULT_SPEED, DEFAULT_VOICE
 from app.tts.engine import KokoroEngine
 
 
-def extract_narration(script):
-    """Extract all spoken content from the generated script."""
+def slugify(text):
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    return text.strip("-")
 
-    narration_parts = []
 
-    def add(text):
+def extract_segments(script):
+    segments = []
+
+    def add(name, text):
         if isinstance(text, str) and text.strip():
-            narration_parts.append(text.strip())
+            segments.append({
+                "name": name,
+                "text": text.strip()
+            })
 
-    # Hook
     hook = script.get("hook", {})
-    if isinstance(hook, dict):
-        add(hook.get("narration"))
+    add("hook", hook.get("narration") if isinstance(hook, dict) else hook)
 
-    # Introduction
     introduction = script.get("introduction", {})
-    if isinstance(introduction, dict):
-        add(introduction.get("narration"))
+    add(
+        "introduction",
+        introduction.get("narration")
+        if isinstance(introduction, dict)
+        else introduction
+    )
 
-    # Sections
-    sections = script.get("sections", [])
-
-    for index, section in enumerate(sections, start=1):
+    for index, section in enumerate(script.get("sections", []), start=1):
         if not isinstance(section, dict):
             continue
 
-        add(section.get("heading"))
-        add(section.get("narration"))
+        heading = section.get("heading", f"Section {index}")
+        narration = section.get("narration", "")
 
-        practical_example = section.get("practical_example")
-        if practical_example:
-            add("Practical example.")
-            add(practical_example)
+        if narration.strip():
+            segments.append({
+                "name": f"section_{index:02d}",
+                "text": f"{heading}. {narration}"
+            })
 
-    # Conclusion
     conclusion = script.get("conclusion", {})
-    if isinstance(conclusion, dict):
-        add(conclusion.get("narration"))
+    add(
+        "conclusion",
+        conclusion.get("narration")
+        if isinstance(conclusion, dict)
+        else conclusion
+    )
 
-    # Call to action
-    cta = script.get("call_to_action")
+    cta = script.get("call_to_action", "")
+    add(
+        "call_to_action",
+        cta.get("narration") if isinstance(cta, dict) else cta
+    )
 
-    if isinstance(cta, dict):
-        add(cta.get("narration"))
-    else:
-        add(cta)
-
-    return "\n\n".join(narration_parts)
-
-
-def create_slug(title):
-    slug = re.sub(r"[^a-z0-9]+", "-", title.lower())
-    return slug.strip("-")
+    return segments
 
 
-def generate_audio(script_path, voice, speed):
+def validate_audio(audio, sample_rate):
+    if audio is None or len(audio) == 0:
+        raise ValueError("Generated audio is empty.")
 
-    script_path = Path(script_path).resolve()
+    if not np.all(np.isfinite(audio)):
+        raise ValueError("Audio contains NaN or infinite values.")
+
+    peak = float(np.max(np.abs(audio)))
+    rms = float(np.sqrt(np.mean(np.square(audio))))
+
+    duration = len(audio) / sample_rate
+
+    if duration <= 0:
+        raise ValueError("Invalid audio duration.")
+
+    return {
+        "duration_seconds": round(duration, 2),
+        "peak_amplitude": round(peak, 4),
+        "rms_amplitude": round(rms, 4),
+        "clipping_detected": peak >= 0.999,
+        "sample_rate": sample_rate,
+        "valid": True
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--script", required=True)
+    parser.add_argument("--voice", default=DEFAULT_VOICE)
+    parser.add_argument("--speed", type=float, default=DEFAULT_SPEED)
+
+    args = parser.parse_args()
+
+    script_path = Path(args.script)
 
     if not script_path.exists():
         raise FileNotFoundError(f"Script not found: {script_path}")
@@ -81,110 +111,99 @@ def generate_audio(script_path, voice, speed):
         script = json.load(file)
 
     title = script.get("title", script_path.stem)
+    output_dir = AUDIO_OUTPUT_DIR / slugify(title)
+    segments_dir = output_dir / "segments"
 
-    narration = extract_narration(script)
+    segments_dir.mkdir(parents=True, exist_ok=True)
 
-    if not narration:
-        raise ValueError("No narration found in script.")
+    segments = extract_segments(script)
 
-    output_dir = AUDIO_OUTPUT_DIR / create_slug(title)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if not segments:
+        raise ValueError("No narration segments found in script.")
 
-    audio_path = output_dir / "narration.wav"
-    metadata_path = output_dir / "metadata.json"
-
-    print("\n===================================")
-    print("AI Content Studio - Kokoro TTS")
-    print("===================================")
-
-    print("Title:", title)
-    print("Voice:", voice)
-    print("Speed:", speed)
-    print("Narration characters:", len(narration))
+    print(f"Title: {title}")
+    print(f"Voice: {args.voice}")
+    print(f"Segments: {len(segments)}")
 
     engine = KokoroEngine()
 
-    start_time = time.time()
-
-    result = engine.generate(
-        text=narration,
-        voice=voice,
-        speed=speed,
-    )
-
-    generation_time = time.time() - start_time
-
-    sf.write(
-        audio_path,
-        result["audio"],
-        result["sample_rate"],
-    )
-
-    metadata = {
+    generated_audio = []
+    manifest = {
         "title": title,
-        "source_script": str(script_path),
-        "voice": voice,
-        "speed": speed,
-        "sample_rate": result["sample_rate"],
-        "audio_duration_seconds": round(result["duration"], 2),
-        "generation_time_seconds": round(generation_time, 2),
-        "real_time_factor": round(
-            generation_time / result["duration"], 3
-        ) if result["duration"] else None,
-        "narration_characters": len(narration),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "audio_file": str(audio_path),
+        "voice": args.voice,
+        "speed": args.speed,
+        "segments": []
     }
 
-    with metadata_path.open("w", encoding="utf-8") as file:
-        json.dump(metadata, file, indent=4)
+    sample_rate = None
+    silence = None
 
-    print("\n===================================")
-    print("TTS GENERATION COMPLETED")
-    print("===================================")
+    for index, segment in enumerate(segments, start=1):
+        print(f"\nGenerating {segment['name']}...")
 
-    print("Audio:", audio_path)
-    print("Metadata:", metadata_path)
-    print("Duration:", result["duration"], "seconds")
-    print("Generation time:", round(generation_time, 2), "seconds")
-    print("RTF:", metadata["real_time_factor"])
+        result = engine.generate(
+            text=segment["text"],
+            voice=args.voice,
+            speed=args.speed
+        )
 
+        audio = np.asarray(result["audio"], dtype=np.float32)
+        sample_rate = result["sample_rate"]
 
-def main():
+        quality = validate_audio(audio, sample_rate)
 
-    parser = argparse.ArgumentParser(
-        description="Generate narration from an AI Content Studio script."
+        segment_path = segments_dir / f"{segment['name']}.wav"
+        sf.write(segment_path, audio, sample_rate)
+
+        generated_audio.append(audio)
+
+        if silence is None:
+            silence = np.zeros(int(sample_rate * 0.35), dtype=np.float32)
+
+        manifest["segments"].append({
+            "name": segment["name"],
+            "file": str(segment_path.relative_to(output_dir)),
+            "generation_time_seconds": round(
+                result["generation_time"], 2
+            ),
+            "quality": quality
+        })
+
+        print(f"Saved: {segment_path}")
+        print(f"Duration: {quality['duration_seconds']} seconds")
+        print(f"Clipping: {quality['clipping_detected']}")
+
+        if index < len(segments):
+            generated_audio.append(silence)
+
+    final_audio = np.concatenate(generated_audio)
+
+    final_quality = validate_audio(final_audio, sample_rate)
+
+    final_path = output_dir / "narration.wav"
+    sf.write(final_path, final_audio, sample_rate)
+
+    manifest["final_audio"] = {
+        "file": "narration.wav",
+        "quality": final_quality
+    }
+
+    manifest["total_duration_seconds"] = final_quality["duration_seconds"]
+    manifest["completed_at"] = time.strftime(
+        "%Y-%m-%d %H:%M:%S"
     )
 
-    parser.add_argument(
-        "--script",
-        required=True,
-        help="Path to the generated script.json",
-    )
+    manifest_path = output_dir / "manifest.json"
 
-    parser.add_argument(
-        "--voice",
-        default=DEFAULT_VOICE,
-        help="Kokoro voice",
-    )
+    with manifest_path.open("w", encoding="utf-8") as file:
+        json.dump(manifest, file, indent=2)
 
-    parser.add_argument(
-        "--speed",
-        type=float,
-        default=DEFAULT_SPEED,
-        help="Speech speed",
-    )
-
-    args = parser.parse_args()
-
-    if not 0.5 <= args.speed <= 2.0:
-        parser.error("Speed must be between 0.5 and 2.0.")
-
-    generate_audio(
-        script_path=args.script,
-        voice=args.voice,
-        speed=args.speed,
-    )
+    print("\n========== COMPLETE ==========")
+    print(f"Final audio: {final_path}")
+    print(f"Manifest: {manifest_path}")
+    print(f"Duration: {final_quality['duration_seconds']} seconds")
+    print(f"Segments: {len(segments)}")
+    print(f"Clipping detected: {final_quality['clipping_detected']}")
 
 
 if __name__ == "__main__":
