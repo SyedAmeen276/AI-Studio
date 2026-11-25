@@ -8,3 +8,4 @@ output/*
 !output/.gitkeep
 models/
 *.log
+.venv-kokoro/
