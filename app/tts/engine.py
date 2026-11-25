@@ -5,7 +5,7 @@ import torch
 from kokoro import KPipeline
 
 from app.tts.config import SAMPLE_RATE
-
+from app.tts.pronunciation import PronunciationProcessor
 
 class KokoroEngine:
 
@@ -13,6 +13,7 @@ class KokoroEngine:
         print("Initializing Kokoro TTS...")
 
         self.pipeline = KPipeline(lang_code=lang_code)
+        self.pronunciation = PronunciationProcessor()
 
         print("Kokoro initialized.")
         print("MPS available:", torch.backends.mps.is_available())
@@ -22,8 +23,10 @@ class KokoroEngine:
         start_time = time.time()
         chunks = []
 
+        processed_text = self.pronunciation.normalize(text)
+
         generator = self.pipeline(
-            text,
+            processed_text,
             voice=voice,
             speed=speed,
         )

@@ -8,10 +8,11 @@ SAMPLE_RATE = 24000
 
 AUDIO_OUTPUT_DIR = PROJECT_ROOT / "output" / "audio"
 
-SUPPORTED_VOICES = [
-    "af_heart",
-    "af_bella",
-    "af_nicole",
-    "am_adam",
-    "am_michael",
-]
+# American English voices for initial comparison
+SUPPORTED_VOICES = {
+    "af_heart": "Female - Heart",
+    "af_bella": "Female - Bella",
+    "af_nicole": "Female - Nicole",
+    "am_michael": "Male - Michael",
+    "am_fenrir": "Male - Fenrir",
+}
