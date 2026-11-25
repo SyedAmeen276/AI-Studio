@@ -1,0 +1,88 @@
+{
+  "topics": [
+    {
+      "id": "docker-internals",
+      "title": "How Docker Works Internally",
+      "category": "Systems Engineering",
+      "duration": 5,
+      "audience": "Software developers and beginners",
+      "concepts": [
+        "Docker daemon",
+        "Docker client",
+        "Docker images",
+        "Docker containers",
+        "Linux namespaces",
+        "cgroups",
+        "Docker networking",
+        "Docker volumes"
+      ]
+    },
+    {
+      "id": "cpp-smart-pointers",
+      "title": "C++ Smart Pointers Explained",
+      "category": "C++ Programming",
+      "duration": 5,
+      "audience": "C++ developers and beginners",
+      "concepts": [
+        "unique_ptr",
+        "shared_ptr",
+        "weak_ptr",
+        "RAII",
+        "ownership",
+        "memory management",
+        "reference counting"
+      ]
+    },
+    {
+      "id": "tcp-handshake",
+      "title": "How TCP Three-Way Handshake Works",
+      "category": "Networking",
+      "duration": 5,
+      "audience": "Software developers and networking beginners",
+      "concepts": [
+        "TCP",
+        "SYN",
+        "SYN-ACK",
+        "ACK",
+        "client",
+        "server",
+        "sequence numbers",
+        "connection establishment"
+      ]
+    },
+    {
+      "id": "browser-request",
+      "title": "What Happens When You Type Google.com",
+      "category": "Computer Science",
+      "duration": 5,
+      "audience": "Software developers and beginners",
+      "concepts": [
+        "DNS",
+        "IP address",
+        "TCP",
+        "TLS",
+        "HTTP",
+        "browser",
+        "server",
+        "network request"
+      ]
+    },
+    {
+      "id": "rag-vs-finetuning",
+      "title": "RAG vs Fine-Tuning Explained",
+      "category": "Artificial Intelligence",
+      "duration": 5,
+      "audience": "Developers interested in AI and machine learning",
+      "concepts": [
+        "RAG",
+        "fine-tuning",
+        "embeddings",
+        "vector database",
+        "retrieval",
+        "large language models",
+        "training data",
+        "inference"
+      ]
+    }
+  ]
+}
