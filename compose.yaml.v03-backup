@@ -1,0 +1,32 @@
+name: ai-content-studio
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: acs-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks: [ai-studio]
+  content-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: acs-content-engine
+    working_dir: /workspace
+    command: ["sleep", "infinity"]
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./app:/workspace/app
+      - ./output:/workspace/output
+    depends_on: [ollama]
+    networks: [ai-studio]
+networks:
+  ai-studio:
+    driver: bridge
+volumes:
+  ollama_data:
